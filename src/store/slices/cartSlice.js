@@ -1,60 +1,108 @@
-import { produce } from "immer"
+import { createAsyncThunk, createSelector, createSlice } from "@reduxjs/toolkit"
+import { fetchData } from "../middleware/apiMiddleware"
 
-const CART_ADD_ITEMS = 'cart/addItems'
-const CART_REMOVE_ITEMS = 'cart/removeItems'
-const CART_ITEM_INCREASE_QUANTITY = 'cart/increaseItemQuantity'
-const CART_ITEM_DECREASE_QUANTITY = 'cart/decreaseItemQuantity'
-
-export function addCartItem(productData) {
-  return { type: CART_ADD_ITEMS, payload: productData }
-}
-
-export function removeCartItem(productId) {
-  return { type: CART_REMOVE_ITEMS, payload: { productId } }
-}
-
-export function decreaseCartItemQuantity(productId) {
-  return {
-    type: CART_ITEM_DECREASE_QUANTITY,
-    payload: { productId },
+const findItemIndex = (state, action) =>
+state.findIndex((cartItem) => cartItem.productId === action.payload.productId)
+export const fetchingCartData = createAsyncThunk('cart/fetchCartItems',async()=>{
+  try{
+    const response = await fetch('https://fakestoreapi.com/carts')
+    
+    return response.json()
   }
-}
-
-export function increaseCartItemQuantity(productId) {
-  return {
-    type: CART_ITEM_INCREASE_QUANTITY,
-    payload: { productId },
+  catch(err){
+    throw err
   }
-}
+})
+const slice = createSlice({
+  name: "cart",
+  initialState:{
+    loading: false,
+    list: [],
+    error: ''
+  },
+  reducers: {
+    // fetchCartItem(state){
+    //   state.loading = true
+    // },
+    // loadCartItem(state, action){
+    //   const temp = action.payload[0]
+    //   state.list =  temp.products
+    //   state.loading = false
+    // },
+    addCartItem(state, action) {
+      const existingItemIndex = findItemIndex(state.list, action)
+      if (existingItemIndex !== -1) {
+        state.list[existingItemIndex].quantity += 1
+      } else {
+        state.list.push({ ...action.payload, quantity: 1 })
+      }
+    },
+    removeCartItem(state, action) {
+      const existingItemIndex = findItemIndex(state.list, action)
+      if (existingItemIndex !== -1) {
+        state.list.splice(existingItemIndex, 1)
+      }
+    },
+    increaseCartItemQuantity(state, action) {
+      const existingItemIndex = findItemIndex(state.list, action)
+      if (existingItemIndex !== -1) {
+        state.list[existingItemIndex].quantity += 1
+      }
+    },
+    decreaseCartItemQuantity(state, action) {
+      const existingItemIndex = findItemIndex(state.list, action)
+      if (existingItemIndex !== -1) {
+        state.list[existingItemIndex].quantity -= 1
+        if (state.list[existingItemIndex].quantity === 0) {
+          state.list.splice(existingItemIndex, 1)
+        }
+      }
+    },
+  },
+  extraReducers: (builder)=>{
+    builder.addCase(fetchingCartData.pending, (state) =>{
+      state.loading = true
+    }).addCase(fetchingCartData.fulfilled, (state, action)=>{
+      const temp = action.payload[0]
+      state.list =  temp.products
+      state.loading = false
+    })
+  }
+})
 
-// Reducer
-export default function cartReducer(orignalState = [], action) {
- return produce(orignalState, (state)=>{
-    const existingItemIndex = state.findIndex(
-      (cartItem) => cartItem.productId === action.payload.productId
-    )
-    switch (action.type) {
-      case CART_ADD_ITEMS:
-        if (existingItemIndex !== -1) {
-          state[existingItemIndex].quantity += 1
-          return state
-        }
-        state.push({ ...action.payload, quantity: 1 })
-        return state
-      case CART_REMOVE_ITEMS:
-        state.splice(existingItemIndex, 1)
-        return state
-      case CART_ITEM_INCREASE_QUANTITY:
-        state[existingItemIndex].quantity += 1
-        return state
-      case CART_ITEM_DECREASE_QUANTITY:
-        state[existingItemIndex].quantity -= 1
-        if(state[existingItemIndex].quantity === 0){
-          state.splice(existingItemIndex, 1)
-        }
-        return state
-      default:
-        return state
-    }
-  })
-}
+export const getCartLoadingState = state => state.cartItems.loading
+export const getAllCartItems= createSelector(
+  [(state) => state.products.list, (state) => state.cartItems.list],
+  (products, cartItems) =>
+    cartItems
+      .map(({ productId, quantity }) => {
+        const cartProduct = products.find((p) => p.id === productId)
+        return cartProduct ? { ...cartProduct, quantity } : null
+      })
+      .filter((({title})=>title))
+)
+
+// export const fetchingCartData = ()=>{
+//   return (dispatch)=>{
+//     dispatch(fetchCartItem())
+//     fetch('https://fakestoreapi.com/carts')
+//     .then((res) => res.json())
+//     .then((data)=>{
+//       dispatch(loadCartItem(data.splice(1,1)))
+//     })
+//     .catch(()=>{
+//       // dispatch(fetchProductsError())
+//     })
+//   }
+//}
+
+export const {
+  fetchCartItem,
+  loadCartItem,
+  addCartItem,
+  removeCartItem,
+  increaseCartItemQuantity,
+  decreaseCartItemQuantity,
+} = slice.actions
+
+export default slice.reducer
